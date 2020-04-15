@@ -1,96 +1,101 @@
 package hu.mta.sztaki.lpds.cloud.simulator.helpers.trace;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.concurrent.ThreadLocalRandom;
+
 import hu.mta.sztaki.lpds.cloud.simulator.helpers.job.Job;
 import hu.mta.sztaki.lpds.cloud.simulator.helpers.trace.file.TraceFileReaderFoundation;
 
-public class PreziReader extends TraceFileReaderFoundation {   
+public class PreziReader extends TraceFileReaderFoundation {
 
 	TraceFileReaderFoundation TFRF;
 
 	public PreziReader(String fileName, int from, int to, boolean furtherjobs, Class<? extends Job> jobType)
 			throws SecurityException, NoSuchMethodException {
 		super("Grid workload format", fileName, from, to, furtherjobs, jobType);
-		// TODO Auto-generated constructor stub
 	}
 
+	// This methods checks to see what the file ends in the following and splits it
 	protected boolean isTraceLine(final String param) {
-		boolean isValid = false;
 		String[] test = param.split(" ");
 
-		if (test[0].equals(test[0].valueOf(0))) {
-			if (test[1].equals(test[1].valueOf(1))) {
+		if (test[0].equals(String.valueOf(0))) {
+			if (test[1].equals(String.valueOf(1))) {
 				if (test[3].equalsIgnoreCase("default")) {
-					isValid = true;
 				} else if (test[3].equalsIgnoreCase("url")) {
-					isValid = true;
 				} else if (test[3].equalsIgnoreCase("export")) {
-					isValid = true;
 
 				}
 			}
 		}
 
-		if (isValid = true) {
+		if (true) {
 			return true;
 		} else
 			return false;
-
 	}
 
 	protected void metaDataCollector(String data) {
 
 	}
 
-	protected Job createJobFromLine(String job)
+	public Job createJobFromLine(String jobstring)
 			throws IllegalArgumentException, InstantiationException, IllegalAccessException, InvocationTargetException {
+		jobstring.endsWith("ASKALON");
+		String[] elements = jobstring.trim().split("\\s+");
 
-		final String[] fragments = job.trim().split("\\s+");
-		try {
-			/**
-			 * String id, long submit, long queue, long exec, int nprocs, double ppCpu, long
-			 * ppMem, String user, String group, String executable, Job preceding, long
-			 * delayAfter
-			 */
-			// 1 done, 0 fail, 5 cancel
-			int jobState = Integer.parseInt(fragments[10]);
-			int procs = Integer.parseInt(fragments[4]);
-			long runtime = Long.parseLong(fragments[3]);
-			long waitTime = Long.parseLong(fragments[2]);
-			if (jobState != 1 && (procs < 1 || runtime < 0)) {
-				return null;
-			} else {
-				final String preceedingJobId = fragments[16].trim();
-				Job preceedingJob = null;
-				if (!preceedingJobId.equals("-1")) {
-					preceedingJob = jobLookupInCache(preceedingJobId);
-				}
-				return jobCreator.newInstance(
-						// id:
-						fragments[0],
-						// submit time in secs:
-						Long.parseLong(fragments[1]),
-						// wait time in secs:
-						Math.max(0, waitTime),
-						// run time in secs:
-						Math.max(0, runtime),
-						// allocated processors:
-						Math.max(1, procs),
-						// average cpu time:
-						(long) Double.parseDouble(fragments[5]),
-						// average memory:
-						Long.parseLong(fragments[6]),
-						// userid:
-						fragments[11],
-						// groupid:
-						fragments[12],
-						// execid:
-						fragments[13], preceedingJob, preceedingJob == null ? 0 : Long.parseLong(fragments[17]));
-			}
-
-		} catch (ArrayIndexOutOfBoundsException ex) {
-			// Incomplete line, ignore it
+		if (elements[2].contains("error:unsupported-request-method")) {
+			return null;
 		}
-		return null;
+		long jobState = Long.parseLong(elements[0]);
+		// Hard coded data values for testing purposes
+		int procs = ThreadLocalRandom.current().nextInt(1, 4);
+		long runtime = 400;
+		long waitTime = 0;
+		String name = elements[2];
+
+		String[] values = name.split("w");
+		String desired = values[0];
+		// object name = object name.substring(0, endIndex)
+		desired = desired.substring(0, desired.length() - 1);
+
+		String submitTime = elements[1];
+		submitTime = submitTime.substring(0, submitTime.indexOf("."));
+		long submitToLong = Long.parseLong(submitTime);
+
+		if (jobState != 1 && (procs < 1 || runtime < 0)) {
+			return null;
+		} else {
+			return jobCreator.newInstance(
+					// Gets id from log files first element
+					elements[0],
+					// Gets submit time:
+					submitToLong,
+					// Gets the queueing time:
+					Math.max(0, waitTime),
+					// Gets the execution time:
+					Math.max(0, runtime),
+					// Gets number of processors
+					Math.max(1, procs),
+					// Gets average execution time
+					300,
+					// no memory
+					300,
+					// Gets for user name:
+					parseTextualField(desired),
+					// Gets for group membership:
+					parseTextualField(desired),
+					// Gets executable name:
+					parseTextualField(desired),
+					// No preceding job
+					null, 0);
+		}
+	}
+
+	// check to see if the unparsed data
+	// matches("^-?[0-9](?:\\.[0-9])?$")?"N/A":unparsed;
+	private String parseTextualField(final String unparsed) {
+		return unparsed.equals("-1") ? "N/A" : unparsed;
+
 	}
 }
